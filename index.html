@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chromebook Manager - Supabase</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* SEUS ESTILOS AQUI */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Inter', -apple-system, sans-serif;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .card-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+            padding-left: 15px;
+        }
+        .form-group { margin-bottom: 15px; }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        th {
+            background: #f9fafb;
+            font-weight: 600;
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 10px;
+            display: none;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>📱 Chromebook Manager Pro</h1>
+            <p style="color: #10b981; margin-top: 10px;">✅ Dados sincronizados globalmente via Supabase</p>
+        </div>
+
+        <div class="card">
+            <div class="card-title">📝 Novo Agendamento</div>
+            <form id="formAgendamento">
+                <div class="form-group">
+                    <label>Professor *</label>
+                    <input type="text" id="professor" required>
+                </div>
+                <div class="form-group">
+                    <label>Turma *</label>
+                    <select id="turma" required>
+                        <option value="">Carregando turmas...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Quantidade *</label>
+                    <input type="number" id="quantidade" min="1" max="100" value="10" required>
+                </div>
+                <div class="form-group">
+                    <label>Data *</label>
+                    <input type="date" id="data" required>
+                </div>
+                <div class="form-group">
+                    <label>Horário Retirada</label>
+                    <select id="horarioRetirada">
+                        <option>07:00</option><option>07:50</option><option>09:00</option>
+                        <option>09:50</option><option>10:40</option><option>12:20</option><option>13:10</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Horário Devolução</label>
+                    <select id="horarioDevolucao">
+                        <option>07:50</option><option>08:40</option><option>09:50</option>
+                        <option>10:40</option><option>11:30</option><option>13:10</option><option>14:00</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Observações</label>
+                    <textarea id="observacoes" rows="3"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">➕ Adicionar Agendamento</button>
+                <button type="button" class="btn" onclick="limparFormulario()">🗑️ Limpar</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <div class="card-title">📋 Agendamentos Realizados</div>
+            <div id="loading">Carregando dados...</div>
+            <div id="tabelaContainer" style="display: none;">
+                <table id="tabelaAgendamentos">
+                    <thead>
+                        <tr><th>Professor</th><th>Turma</th><th>Qtd</th><th>Data</th><th>Retirada</th><th>Devolução</th><th>Observações</th><th>Ações</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // 🔑 CONFIGURAÇÕES DO SUPABASE (VOCÊ VAI CONFIGURAR NO NETLIFY)
+        // Não coloque as credenciais diretamente aqui! Use variáveis de ambiente.
+        const SUPABASE_URL = window.SUPABASE_URL || '{{SUPABASE_URL}}';
+        const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || '{{SUPABASE_ANON_KEY}}';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        function mostrarToast(msg, tipo = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.style.backgroundColor = tipo === 'success' ? '#10b981' : '#ef4444';
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 3000);
+        }
+        
+        async function carregarTurmas() {
+            try {
+                const { data, error } = await supabase
+                    .from('turmas')
+                    .select('*')
+                    .order('ordem', { ascending: true });
+                
+                if (error) throw error;
+                
+                const select = document.getElementById('turma');
+                select.innerHTML = '<option value="">Selecione uma turma</option>';
+                
+                if (data && data.length > 0) {
+                    data.forEach(turma => {
+                        const option = document.createElement('option');
+                        option.value = turma.nome;
+                        option.textContent = turma.nome;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Erro ao carregar turmas:', error);
+                mostrarToast('Erro ao carregar turmas', 'error');
+            }
+        }
+        
+        async function carregarAgendamentos() {
+            try {
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('tabelaContainer').style.display = 'none';
+                
+                const { data, error } = await supabase
+                    .from('agendamentos')
+                    .select('*')
+                    .order('data', { ascending: false });
+                
+                if (error) throw error;
+                
+                const tbody = document.querySelector('#tabelaAgendamentos tbody');
+                tbody.innerHTML = '';
+                
+                if (data && data.length > 0) {
+                    data.forEach(ag => {
+                        const row = tbody.insertRow();
+                        row.insertCell(0).textContent = ag.professor;
+                        row.insertCell(1).textContent = ag.turma;
+                        row.insertCell(2).textContent = ag.quantidade;
+                        row.insertCell(3).textContent = ag.data;
+                        row.insertCell(4).textContent = ag.horario_retirada;
+                        row.insertCell(5).textContent = ag.horario_devolucao;
+                        row.insertCell(6).textContent = ag.observacoes || '-';
+                        const acoes = row.insertCell(7);
+                        acoes.innerHTML = `<button class="btn" onclick="deletarAgendamento(${ag.id})" style="background:#ef4444;color:white;">🗑️ Excluir</button>`;
+                    });
+                } else {
+                    const row = tbody.insertRow();
+                    const cell = row.insertCell(0);
+                    cell.colSpan = 8;
+                    cell.textContent = 'Nenhum agendamento encontrado';
+                    cell.style.textAlign = 'center';
+                    cell.style.padding = '40px';
+                }
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('tabelaContainer').style.display = 'block';
+            } catch (error) {
+                console.error('Erro ao carregar agendamentos:', error);
+                mostrarToast('Erro ao carregar dados', 'error');
+            }
+        }
+        
+        async function adicionarAgendamento(e) {
+            e.preventDefault();
+            
+            const professor = document.getElementById('professor').value.trim();
+            const turma = document.getElementById('turma').value;
+            const quantidade = parseInt(document.getElementById('quantidade').value);
+            const data = document.getElementById('data').value;
+            const horario_retirada = document.getElementById('horarioRetirada').value;
+            const horario_devolucao = document.getElementById('horarioDevolucao').value;
+            const observacoes = document.getElementById('observacoes').value;
+            
+            if (!professor || !turma) {
+                mostrarToast('Preencha todos os campos obrigatórios!', 'error');
+                return;
+            }
+            
+            try {
+                const { error } = await supabase
+                    .from('agendamentos')
+                    .insert([{
+                        id: Date.now(),
+                        professor,
+                        turma,
+                        quantidade,
+                        data,
+                        horario_retirada,
+                        horario_devolucao,
+                        observacoes
+                    }]);
+                
+                if (error) throw error;
+                
+                mostrarToast('Agendamento realizado com sucesso!', 'success');
+                limparFormulario();
+                carregarAgendamentos();
+            } catch (error) {
+                console.error('Erro ao adicionar:', error);
+                mostrarToast('Erro ao salvar agendamento', 'error');
+            }
+        }
+        
+        async function deletarAgendamento(id) {
+            if (!confirm('Tem certeza que deseja excluir este agendamento?')) return;
+            
+            try {
+                const { error } = await supabase
+                    .from('agendamentos')
+                    .delete()
+                    .eq('id', id);
+                
+                if (error) throw error;
+                
+                mostrarToast('Agendamento excluído com sucesso!', 'success');
+                carregarAgendamentos();
+            } catch (error) {
+                console.error('Erro ao deletar:', error);
+                mostrarToast('Erro ao excluir agendamento', 'error');
+            }
+        }
+        
+        function limparFormulario() {
+            document.getElementById('professor').value = '';
+            document.getElementById('quantidade').value = '10';
+            document.getElementById('data').valueAsDate = new Date();
+            document.getElementById('observacoes').value = '';
+            document.getElementById('horarioRetirada').value = '07:00';
+            document.getElementById('horarioDevolucao').value = '14:00';
+        }
+        
+        document.getElementById('formAgendamento').addEventListener('submit', adicionarAgendamento);
+        document.getElementById('data').valueAsDate = new Date();
+        
+        // Inicializar
+        carregarTurmas();
+        carregarAgendamentos();
+    </script>
+</body>
+</html>
