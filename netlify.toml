@@ -1,0 +1,14 @@
+[build]
+  publish = "."
+
+# Substituição de variáveis de ambiente no HTML
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+
+# Substituir placeholders no HTML pelas variáveis de ambiente
+[template.environment]
+  SUPABASE_URL = "https://SEU_PROJETO.supabase.co"
+  SUPABASE_ANON_KEY = "SUA_CHAVE_ANONIMA_AQUI"
